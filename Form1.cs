@@ -48,15 +48,13 @@ namespace Drop2Phone
 	/// </summary>
 	public class Form1 : System.Windows.Forms.Form
 	{
-		protected int lastX=0;
-		protected int lastY=0;
-		protected string lastFilename=String.Empty;
-		protected PictureBox thumbnail;
-		protected DragDropEffects effect;
-		protected bool validData;
-		protected Image image;
-		protected Image nextImage;
-		protected Thread getImageThread;
+		protected int _lastX = 0;
+		protected int _lastY = 0;
+		protected string _lastFilename = String.Empty;
+        protected bool _validData = false;
+		protected DragDropEffects _effect;
+
+        protected const string DEST_DIR = "/storage/external_SD/Downloads";
 
 		private System.Windows.Forms.PictureBox pb;
 		/// <summary>
@@ -65,7 +63,7 @@ namespace Drop2Phone
 		private System.ComponentModel.Container components = null;
 
 		public Form1()
-		{
+        {
 			//
 			// Required for Windows Form Designer support
 			//
@@ -79,16 +77,17 @@ namespace Drop2Phone
 		/// <summary>
 		/// Clean up any resources being used.
 		/// </summary>
-		protected override void Dispose( bool disposing )
-		{
-			if( disposing )
-			{
-				if (components != null) 
-				{
+		protected override void Dispose(bool disposing)
+        {
+			if (disposing)
+            {
+				if (components != null)
+                {
 					components.Dispose();
 				}
 			}
-			base.Dispose( disposing );
+
+			base.Dispose(disposing);
 		}
 
 		#region Windows Form Designer generated code
@@ -97,7 +96,7 @@ namespace Drop2Phone
 		/// the contents of this method with the code editor.
 		/// </summary>
 		private void InitializeComponent()
-		{
+        {
 			this.pb = new System.Windows.Forms.PictureBox();
 			this.SuspendLayout();
 			// 
@@ -114,12 +113,8 @@ namespace Drop2Phone
 			this.DragLeave += new System.EventHandler(this.OnDragLeave);
 			this.DragDrop += new System.Windows.Forms.DragEventHandler(this.OnDragDrop);
 			this.DragOver += new System.Windows.Forms.DragEventHandler(this.OnDragOver);
-			this.AllowDrop=true;
+			this.AllowDrop = true;
 
-			thumbnail=new PictureBox();
-			thumbnail.SizeMode=PictureBoxSizeMode.StretchImage;
-			pb.Controls.Add(thumbnail);
-			thumbnail.Visible=false;
 			// 
 			// Form1
 			// 
@@ -127,7 +122,7 @@ namespace Drop2Phone
 			this.ClientSize = new System.Drawing.Size(292, 266);
 			this.Controls.Add(this.pb);
 			this.Name = "Form1";
-			this.Text = "Image Viewer";
+			this.Text = "Drop 2 Phone";
 			this.ResumeLayout(false);
 
 		}
@@ -137,169 +132,87 @@ namespace Drop2Phone
 		/// The main entry point for the application.
 		/// </summary>
 		[STAThread]
-		static void Main() 
-		{
+		static void Main()
+        {
 			Application.Run(new Form1());
 		}
 
 		private void OnDragDrop(object sender, System.Windows.Forms.DragEventArgs e)
-		{
+        {
 			Debug.WriteLine("OnDragDrop");
-			if (validData)
+			if (_validData)
 			{
-				while (getImageThread.IsAlive)
-				{
-					Application.DoEvents();
-					Thread.Sleep(0);
-				}
-				thumbnail.Visible=false;
-				image=nextImage;
-				AdjustView();
-				if ( (pb.Image != null) && (pb.Image != nextImage) )
-				{
-					pb.Image.Dispose();
-				}
-				pb.Image=image;
+                // TODO: Handle file drop
+                Debug.WriteLine("Dropped file");
+
+                Process push = new Process();
+                push.StartInfo.FileName = "adb";
+                push.StartInfo.Arguments = "push \"" + _lastFilename + "\" " + DEST_DIR;
+                push.StartInfo.UseShellExecute = false;
+
+                try
+                {
+                    push.Start();
+                    push.WaitForExit();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    Debug.WriteLine(ex);
+                }
+                catch (Win32Exception ex)
+                {
+                    Debug.WriteLine(ex);
+                }
 			}
 		}
 
 		private void OnDragEnter(object sender, System.Windows.Forms.DragEventArgs e)
-		{
+        {
 			Debug.WriteLine("OnDragEnter");
 			string filename;
-			validData=GetFilename(out filename, e);
-			if (validData)
-			{
-				if (lastFilename != filename)
-				{
-					thumbnail.Image=null;
-					thumbnail.Visible=false;
-					lastFilename=filename;
-					getImageThread=new Thread(new ThreadStart(LoadImage));
-					getImageThread.Start();
-				}
-				else
-				{
-					thumbnail.Visible=true;
-				}
+
+			_validData=GetFilename(out filename, e);
+			if (_validData)
+            {
+                _lastFilename = filename;
 				e.Effect=DragDropEffects.Copy;
 			}
-			else
-			{
+            else
+            {
 				e.Effect=DragDropEffects.None;
 			}
 		}
 
 		private void OnDragLeave(object sender, System.EventArgs e)
-		{
+        {
 			Debug.WriteLine("OnDragLeave");
-			thumbnail.Visible=false;
 		}
 
 		private void OnDragOver(object sender, System.Windows.Forms.DragEventArgs e)
-		{
+        {
 			Debug.WriteLine("OnDragOver");
-			if (validData)
-			{
-				if ( (e.X != lastX) || (e.Y != lastY) )
-				{
-					SetThumbnailLocation(this.PointToClient(new Point(e.X, e.Y)));
-				}
-			}
 		}
 																			   
 		protected bool GetFilename(out string filename, DragEventArgs e)
-		{
-			bool ret=false;
-			filename=String.Empty;
+        {
+			bool ret = false;
 
-			if ( (e.AllowedEffect & DragDropEffects.Copy) == DragDropEffects.Copy)
-			{
-				Array data=((IDataObject)e.Data).GetData("FileDrop") as Array;
+			filename = String.Empty;
+
+			if ((e.AllowedEffect & DragDropEffects.Copy) == DragDropEffects.Copy)
+            {
+				Array data = ((IDataObject) e.Data).GetData(DataFormats.FileDrop) as Array;
 				if (data != null)
-				{
-					if ( (data.Length == 1) && (data.GetValue(0) is String) )
-					{
-						filename=((string[])data)[0];
-						string ext=Path.GetExtension(filename).ToLower();
-						if ( (ext==".jpg") || (ext==".png") || (ext==".bmp") )
-						{
-							ret=true;
-						}
+                {
+					if ((data.Length == 1) && (data.GetValue(0) is String))
+                    {
+						filename = ((string[]) data)[0];
+                        return true;
 					}
 				}
 			}
+
 			return ret;
-		}
-
-		protected void SetThumbnailLocation(Point p)
-		{
-			if (thumbnail.Image==null)
-			{
-				thumbnail.Visible=false;
-			}
-			else
-			{
-				p.X-=thumbnail.Width/2;
-				p.Y-=thumbnail.Height/2;
-				thumbnail.Location=p;
-				thumbnail.Visible=true;
-			}
-		}
-
-		protected void AdjustView()
-		{	
-			float fw=this.ClientSize.Width;
-			float fh=this.ClientSize.Height;
-			float iw=image.Width;
-			float ih=image.Height;
-
-			// iw/fw > ih/fh, then iw/fw controls ih
-
-			float rw=fw/iw;			// ratio of width
-			float rh=fh/ih;			// ratio of height
-
-			if (rw < rh)
-			{
-				pb.Width=(int)fw;
-				pb.Height=(int)(ih * rw);
-				pb.Left=0;
-				pb.Top=(int)((fh - pb.Height)/2);
-			}
-			else
-			{
-				pb.Width=(int)(iw * rh);
-				pb.Height=(int)fh;
-				pb.Left=(int)((fw - pb.Width)/2);
-				pb.Top=0;
-			}
-		}
-
-		protected override void OnLayout(LayoutEventArgs levent)
-		{
-			if (image != null)
-			{
-				AdjustView();
-			}
-		}
-
-		public delegate void AssignImageDlgt();
-
-		protected void LoadImage()
-		{
-			nextImage=new Bitmap(lastFilename);
-			this.Invoke(new AssignImageDlgt(AssignImage));
-		}
-
-		protected void AssignImage()
-		{
-			thumbnail.Width=100;
-			// 100    iWidth
-			// ---- = ------
-			// tHeight  iHeight
-			thumbnail.Height=nextImage.Height * 100 / nextImage.Width;
-			SetThumbnailLocation(this.PointToClient(new Point(lastX, lastY)));
-			thumbnail.Image=nextImage;
 		}
 	}
 }
